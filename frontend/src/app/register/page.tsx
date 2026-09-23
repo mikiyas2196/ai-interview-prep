@@ -29,7 +29,18 @@ export default function RegisterPage() {
       await register(name, email, password, passwordConfirmation);
       router.push('/profile');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please check form details.');
+      if (err.response?.data?.errors) {
+        const errorMessages = Object.values(err.response.data.errors)
+          .flat()
+          .join(' ');
+        setError(errorMessages);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Registration failed. Please check form details.');
+      }
     } finally {
       setSubmitting(false);
     }

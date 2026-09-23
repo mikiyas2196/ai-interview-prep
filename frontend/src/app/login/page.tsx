@@ -23,7 +23,18 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to login. Please check credentials.');
+      if (err.response?.data?.errors) {
+        const errorMessages = Object.values(err.response.data.errors)
+          .flat()
+          .join(' ');
+        setError(errorMessages);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Failed to login. Please check credentials.');
+      }
     } finally {
       setSubmitting(false);
     }
