@@ -10,8 +10,8 @@ export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
 
-  const [email, setEmail] = useState('candidate@example.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,7 +71,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors"
-                placeholder="candidate@example.com"
+                placeholder="your.email@example.com"
               />
             </div>
           </div>
@@ -89,11 +89,6 @@ export default function LoginPage() {
                 placeholder="••••••••"
               />
             </div>
-          </div>
-
-          <div className="bg-slate-800/40 border border-slate-700/50 p-3 rounded-xl text-xs text-slate-400 flex justify-between items-center">
-            <span>Demo Candidate Credentials:</span>
-            <span className="font-mono text-indigo-300 font-medium">candidate@example.com / password123</span>
           </div>
 
           <button
