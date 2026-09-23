@@ -36,8 +36,11 @@ class ResumeController extends Controller
         if ($file->getClientOriginalExtension() === 'txt') {
             $text = file_get_contents($file->getRealPath());
         } else {
-            // For PDF / DOCX, extract readable text or sample content
-            $text = "Resume Content from " . $file->getClientOriginalName() . "\nExperience: 3+ years software development with PHP, Laravel, MySQL, React. Developed RESTful web services and database schemas.";
+            // For PDF / DOCX, extract readable text or derive candidate background
+            $rawFileContent = @file_get_contents($file->getRealPath());
+            $sanitizedText = preg_replace('/[^\x20-\x7E\x0A\x0D]/', ' ', substr((string)$rawFileContent, 0, 5000));
+            $userRole = $request->user()->profile?->professional_headline ?: 'Customer Service Officer';
+            $text = "Resume Document: " . $file->getClientOriginalName() . "\nTarget Position: " . $userRole . "\n" . trim($sanitizedText);
         }
 
         $resume = $request->user()->resumes()->create([

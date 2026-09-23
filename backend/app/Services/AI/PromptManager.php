@@ -58,7 +58,7 @@ PROMPT;
 
     public static function getQuestionGenerationPrompt(array $context): string
     {
-        $jobTitle = $context['job_title'] ?? 'Software Engineer';
+        $jobTitle = $context['job_title'] ?? 'Professional Candidate';
         $category = $context['category'] ?? 'Technical';
         $difficulty = $context['difficulty'] ?? 'intermediate';
         $skills = implode(', ', $context['skills'] ?? []);
@@ -70,14 +70,18 @@ PROMPT;
 You are a senior hiring manager conducting a realistic mock interview for a candidate applying for the position of: "{$jobTitle}".
 Category: {$category}
 Target Difficulty: {$difficulty}
-Candidate Technical Skills: {$skills}
+Candidate Stated Skills: {$skills}
 {$langInstruction}
 
-RETRIEVED CANDIDATE MEMORIES & PAST PERFORMANCE (USE TO PERSONALIZE):
+CRITICAL ROLE SPECIFICITY REQUIREMENT:
+The interview questions MUST be 100% relevant to the target position: "{$jobTitle}".
+Do NOT ask about programming, coding, software development, databases, or web servers UNLESS the target role is explicitly a software/IT role.
+For example, for a "Customer Service Officer", ask about customer satisfaction, handling difficult callers, bank teller compliance, conflict resolution, active listening, and service standards.
+
+RETRIEVED CANDIDATE MEMORIES & PAST PERFORMANCE:
 {$memories}
 
-Generate {$count} distinct, realistic, high-quality interview questions.
-If the candidate has previous weaknesses in database design, STAR formatting, or conciseness, craft questions that target those weak areas for improvement.
+Generate {$count} distinct, realistic, high-quality interview questions for "{$jobTitle}".
 
 Return a JSON array of objects with keys:
 - "id": string (unique slug)
@@ -103,7 +107,7 @@ Previous Question: "{$question}"
 Candidate Answer: "{$answer}"
 {$langInstruction}
 
-Based on the candidate's answer, generate a natural, probing follow-up question that drills deeper into technical details, personal contributions, or missing STAR results.
+Based on the candidate's answer, generate a natural, probing follow-up question that drills deeper into domain details, personal contributions, or missing STAR results.
 
 Return a JSON object with keys:
 - "is_needed": boolean
@@ -148,7 +152,7 @@ PROMPT;
 
     public static function getPreparationPlanPrompt(array $context): string
     {
-        $jobTitle = $context['job_title'] ?? 'Software Engineer';
+        $jobTitle = $context['job_title'] ?? 'Professional Candidate';
         $candidateSkills = implode(', ', $context['candidate_skills'] ?? []);
         $requiredSkills = implode(', ', $context['required_skills'] ?? []);
         $weaknesses = implode(', ', $context['weaknesses'] ?? []);
@@ -161,6 +165,8 @@ Required Job Skills: {$requiredSkills}
 Identified Candidate Weaknesses to Target: {$weaknesses}
 {$langInstruction}
 
+CRITICAL: Tailor all daily topics and tasks specifically to the target role: "{$jobTitle}".
+
 Return a JSON array of 7 day objects with keys:
 - "day_number": integer
 - "title": string
@@ -170,6 +176,29 @@ Return a JSON array of 7 day objects with keys:
 - "target_skills": array of strings
 
 Return ONLY valid raw JSON.
+PROMPT;
+    }
+
+    public static function getChatPrompt(array $context): string
+    {
+        $message = $context['message'] ?? '';
+        $jobTitle = $context['job_title'] ?? 'Professional Candidate';
+        $category = $context['category'] ?? 'General';
+        $questionContext = $context['question_context'] ?? '';
+        $langInstruction = self::getLanguageInstruction($context);
+
+        return <<<PROMPT
+You are an expert AI Interview Coach assisting a candidate during a live interview session for the position: "{$jobTitle}".
+Category: {$category}
+Current Question Context: "{$questionContext}"
+{$langInstruction}
+
+Candidate User Message:
+"{$message}"
+
+Provide a concise, encouraging, and actionable response (1-3 paragraphs maximum).
+If the candidate asks for hints or help, offer a helpful structural tip (e.g. STAR method: Situation, Task, Action, Result) or domain hint relevant to "{$jobTitle}".
+Keep your tone warm, professional, and practical.
 PROMPT;
     }
 }

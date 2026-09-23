@@ -48,4 +48,9 @@ interface AIServiceInterface
      * Generate an improved STAR-style answer for coaching feedback.
      */
     public function generateImprovedAnswer(array $context): array;
+
+    /**
+     * Conduct real-time AI interview coaching chat.
+     */
+    public function chatWithAI(array $context): string;
 }

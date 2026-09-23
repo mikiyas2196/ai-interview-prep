@@ -136,4 +136,35 @@ class InterviewController extends Controller
             'report' => $report,
         ]);
     }
+
+    public function chat(Request $request)
+    {
+        $validated = $request->validate([
+            'message' => 'required|string|max:1000',
+            'category' => 'nullable|string',
+            'question_context' => 'nullable|string',
+        ]);
+
+        $user = $request->user();
+        $latestSession = $user->interviewSessions()->latest()->first();
+
+        $jobTitle = $latestSession?->jobPosting?->job_title 
+            ?? (is_array($user->profile?->target_roles) && count($user->profile->target_roles) > 0 ? $user->profile->target_roles[0] : null)
+            ?? $user->profile?->professional_headline
+            ?? $user->profile?->career_goal
+            ?? 'Customer Service Officer';
+
+        $reply = $this->interviewAIService->chatWithAI([
+            'message' => $validated['message'],
+            'category' => $validated['category'] ?? 'Technical',
+            'question_context' => $validated['question_context'] ?? '',
+            'job_title' => $jobTitle,
+            'user' => $user,
+        ]);
+
+        return response()->json([
+            'message' => 'AI response generated successfully',
+            'reply' => $reply,
+        ]);
+    }
 }

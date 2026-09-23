@@ -26,7 +26,13 @@ class InterviewAIService
     ): InterviewSession {
         $jobPosting = $jobPostingId ? JobPosting::find($jobPostingId) : $user->jobPostings()->latest()->first();
 
-        $jobTitle = $jobPosting ? $jobPosting->job_title : ($user->profile?->professional_headline ?? 'Software Engineer');
+        // Determine job title from job posting or candidate profile target role / headline / career goal
+        $jobTitle = $jobPosting ? $jobPosting->job_title : (
+            is_array($user->profile?->target_roles) && count($user->profile->target_roles) > 0
+                ? $user->profile->target_roles[0]
+                : ($user->profile?->professional_headline ?: ($user->profile?->career_goal ?: 'Customer Service Officer'))
+        );
+
         $skills = array_map(fn($s) => $s['name'], $user->skills->toArray());
 
         $session = InterviewSession::create([
@@ -39,6 +45,9 @@ class InterviewAIService
             'status' => 'in_progress',
         ]);
 
+        // Build memories dynamically from user's recorded candidate memories
+        $userMemories = $user->memories ? $user->memories->take(5)->pluck('description')->toArray() : [];
+
         // Build context for AI question generation
         $context = [
             'job_title' => $jobTitle,
@@ -46,8 +55,9 @@ class InterviewAIService
             'difficulty' => $difficulty,
             'skills' => $skills,
             'memories' => [
-                'weaknesses' => ['Database architecture explanation', 'STAR format results'],
-                'strengths' => ['PHP/Laravel REST API design']
+                'weaknesses' => ['STAR format result delivery'],
+                'strengths' => $skills ? array_slice($skills, 0, 3) : ['Communication', 'Domain Expertise'],
+                'notes' => $userMemories
             ],
             'count' => 4,
         ];
@@ -86,5 +96,10 @@ class InterviewAIService
         );
 
         return $answer;
+    }
+
+    public function chatWithAI(array $context): string
+    {
+        return $this->aiService->chatWithAI($context);
     }
 }

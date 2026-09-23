@@ -23,13 +23,17 @@ class PreparationPlanService
 
         $candidateSkills = array_map(fn($s) => $s['name'], $user->skills->toArray());
         $requiredSkills = $jobPosting && $jobPosting->requirements ? ($jobPosting->requirements->required_skills ?? []) : [];
-        $jobTitle = $jobPosting ? $jobPosting->job_title : ($user->profile?->professional_headline ?? 'Software Engineer');
+        $jobTitle = $jobPosting ? $jobPosting->job_title : (
+            is_array($user->profile?->target_roles) && count($user->profile->target_roles) > 0
+                ? $user->profile->target_roles[0]
+                : ($user->profile?->professional_headline ?: ($user->profile?->career_goal ?: 'Customer Service Officer'))
+        );
 
         $context = [
             'job_title' => $jobTitle,
             'candidate_skills' => $candidateSkills,
             'required_skills' => $requiredSkills,
-            'weaknesses' => ['Database architecture explanation', 'STAR result quantification'],
+            'weaknesses' => ['STAR answer result delivery', 'Role-specific scenario prep'],
         ];
 
         $planData = $this->aiService->generatePreparationPlan($context);

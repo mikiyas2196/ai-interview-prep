@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Brain, User as UserIcon, Sparkles, MessageSquare, HelpCircle } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
+import { api } from '@/services/api';
+
 export interface ChatMessage {
   id: string;
   sender: 'ai' | 'user';
@@ -37,7 +39,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
@@ -53,26 +55,38 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI response stream / coaching answer
-    setTimeout(() => {
-      let aiResponseText = `Great question! For ${category} interview questions, focus on providing structured examples with clear action steps and measurable results.`;
-      if (promptText.toLowerCase().includes('hint') || promptText.toLowerCase().includes('help')) {
-        aiResponseText = `💡 Coaching Tip: Structure your response into: 1. Situation context, 2. Task goal, 3. Action you personally took, and 4. Result/Impact achieved.`;
-      } else if (promptText.toLowerCase().includes('star')) {
-        aiResponseText = `⭐ STAR Format: Situation (20%), Task (10%), Action (50% - emphasize YOUR decisions), Result (20% - quantify impact).`;
-      }
+    try {
+      const res = await api.post('/interviews/chat', {
+        message: promptText,
+        category,
+        question_context: questionContext,
+      });
+
+      const aiReply = res.data.reply || `Great question! For ${category} questions, structure your answer using STAR: Situation, Task, Action, Result.`;
 
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           sender: 'ai',
-          text: aiResponseText,
+          text: aiReply,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
+    } catch (err) {
+      console.error('AI Chat Error:', err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          sender: 'ai',
+          text: `💡 Coaching Tip: Structure your response into: 1. Situation context, 2. Task goal, 3. Action you personally took, and 4. Result/Impact achieved.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   return (

@@ -65,6 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Mock Interviews & Question Engine
     Route::get('/interviews', [InterviewController::class, 'index']);
     Route::post('/interviews/start', [InterviewController::class, 'startSession']);
+    Route::post('/interviews/chat', [InterviewController::class, 'chat']);
     Route::get('/interviews/{id}', [InterviewController::class, 'showSession']);
     Route::post('/interviews/{sessionId}/questions/{questionId}/answer', [InterviewController::class, 'submitAnswer']);
     Route::post('/interviews/{sessionId}/questions/{questionId}/follow-up', [InterviewController::class, 'submitFollowUp']);
