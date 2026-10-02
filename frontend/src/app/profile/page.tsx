@@ -154,7 +154,31 @@ export default function ProfilePage() {
       }
 
       setCvStep('applying');
-      setExtractedCvSummary(data.parsed_data || data.data?.parsed_data || null);
+      const parsedData = data.parsed_data || data.data?.parsed_data || null;
+      const updatedUser = data.user || data.data?.user || null;
+
+      setExtractedCvSummary(parsedData || null);
+
+      if (updatedUser?.profile) {
+        if (updatedUser.profile.full_name) setFullName(updatedUser.profile.full_name);
+        if (updatedUser.profile.professional_headline) setHeadline(updatedUser.profile.professional_headline);
+        if (updatedUser.profile.location) setLocation(updatedUser.profile.location);
+        if (updatedUser.profile.phone) setPhone(updatedUser.profile.phone);
+        if (updatedUser.profile.career_goal) setCareerGoal(updatedUser.profile.career_goal);
+        if (updatedUser.profile.professional_summary) setSummary(updatedUser.profile.professional_summary);
+        if (updatedUser.profile.target_roles) {
+          setTargetRoles(Array.isArray(updatedUser.profile.target_roles) ? updatedUser.profile.target_roles.join(', ') : String(updatedUser.profile.target_roles));
+        }
+      } else if (parsedData) {
+        if (parsedData.full_name) setFullName(parsedData.full_name);
+        if (parsedData.professional_headline) setHeadline(parsedData.professional_headline);
+        if (parsedData.location) setLocation(parsedData.location);
+        if (parsedData.phone) setPhone(parsedData.phone);
+        if (parsedData.summary) setSummary(parsedData.summary);
+        if (parsedData.target_roles) {
+          setTargetRoles(Array.isArray(parsedData.target_roles) ? parsedData.target_roles.join(', ') : String(parsedData.target_roles));
+        }
+      }
 
       await refreshUser();
 

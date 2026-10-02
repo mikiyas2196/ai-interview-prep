@@ -153,101 +153,147 @@ class ResumeController extends Controller
         $resume = $user->resumes()->findOrFail($id);
         $data = $resume->parsed_data;
 
-        if (!$data) {
+        if (!$data || !is_array($data)) {
             return response()->json(['message' => 'No parsed data available for this resume'], 400);
         }
 
-        // Apply summary, headline & general profile fields
+        // 1. Extract Profile Fields with Flexible Key Normalization
+        $fullName = $data['full_name'] ?? $data['name'] ?? $data['candidate_name'] ?? $user->profile?->full_name ?? $user->name;
+        $headline = $data['professional_headline'] ?? $data['headline'] ?? $data['title'] ?? $data['current_role'] ?? $data['job_title'] ?? $user->profile?->professional_headline;
+        $summary = $data['summary'] ?? $data['professional_summary'] ?? $data['about'] ?? $data['bio'] ?? $data['description'] ?? $user->profile?->professional_summary;
+        $location = $data['location'] ?? $data['address'] ?? $data['city'] ?? $user->profile?->location;
+        $phone = $data['phone'] ?? $data['phone_number'] ?? $data['contact'] ?? $user->profile?->phone;
+
+        $targetRoles = null;
+        if (!empty($data['target_roles'])) {
+            $targetRoles = is_array($data['target_roles']) ? $data['target_roles'] : array_map('trim', explode(',', $data['target_roles']));
+        } else if (!empty($headline)) {
+            $targetRoles = [$headline];
+        } else {
+            $targetRoles = $user->profile?->target_roles;
+        }
+
+        // Update Profile record
         $user->profile()->updateOrCreate(
             ['user_id' => $user->id],
             [
-                'full_name' => $data['full_name'] ?? $user->profile?->full_name ?? $user->name,
-                'professional_headline' => $data['professional_headline'] ?? $user->profile?->professional_headline,
-                'professional_summary' => $data['summary'] ?? $user->profile?->professional_summary,
-                'location' => $data['location'] ?? $user->profile?->location,
-                'phone' => $data['phone'] ?? $user->profile?->phone,
-                'target_roles' => !empty($data['target_roles'])
-                    ? (is_array($data['target_roles']) ? $data['target_roles'] : array_map('trim', explode(',', $data['target_roles'])))
-                    : $user->profile?->target_roles,
+                'full_name' => $fullName,
+                'professional_headline' => $headline,
+                'professional_summary' => $summary,
+                'location' => $location,
+                'phone' => $phone,
+                'target_roles' => $targetRoles,
             ]
         );
 
-        // Also update User model name if full_name exists
-        if (!empty($data['full_name'])) {
-            $user->update(['name' => $data['full_name']]);
+        if (!empty($fullName)) {
+            $user->update(['name' => $fullName]);
         }
 
-        // Populate skills without duplicate names
-        if (!empty($data['skills']) && is_array($data['skills'])) {
-            foreach ($data['skills'] as $skill) {
-                if (is_array($skill) && !empty($skill['name'])) {
+        // 2. Populate Skills (handles arrays of strings OR arrays of objects)
+        $skills = $data['skills'] ?? $data['skill_list'] ?? [];
+        if (!empty($skills) && is_array($skills)) {
+            foreach ($skills as $skill) {
+                $skillName = '';
+                $category = 'technical';
+                $level = 'advanced';
+                $yrs = 2;
+
+                if (is_string($skill)) {
+                    $skillName = trim($skill);
+                } else if (is_array($skill)) {
+                    $skillName = trim($skill['name'] ?? $skill['skill'] ?? $skill['skill_name'] ?? $skill['title'] ?? '');
+                    $category = $skill['category'] ?? 'technical';
+                    $level = $skill['proficiency_level'] ?? $skill['level'] ?? 'advanced';
+                    $yrs = $skill['years_of_experience'] ?? $skill['years'] ?? 2;
+                }
+
+                if (!empty($skillName)) {
                     $user->skills()->firstOrCreate(
-                        ['name' => $skill['name']],
+                        ['name' => $skillName],
                         [
-                            'category' => $skill['category'] ?? 'technical',
-                            'proficiency_level' => $skill['proficiency_level'] ?? 'advanced',
-                            'years_of_experience' => $skill['years_of_experience'] ?? 2,
+                            'category' => $category,
+                            'proficiency_level' => $level,
+                            'years_of_experience' => (int)$yrs,
                         ]
                     );
                 }
             }
         }
 
-        // Populate experiences
-        if (!empty($data['experience']) && is_array($data['experience'])) {
-            foreach ($data['experience'] as $exp) {
-                if (is_array($exp) && !empty($exp['company']) && !empty($exp['title'])) {
+        // 3. Populate Experiences (handles flexible keys)
+        $experiences = $data['experience'] ?? $data['experiences'] ?? $data['work_history'] ?? $data['employment'] ?? [];
+        if (!empty($experiences) && is_array($experiences)) {
+            foreach ($experiences as $exp) {
+                if (is_array($exp)) {
+                    $company = trim($exp['company'] ?? $exp['company_name'] ?? $exp['organization'] ?? $exp['employer'] ?? '');
+                    $title = trim($exp['title'] ?? $exp['job_title'] ?? $exp['position'] ?? $exp['role'] ?? '');
+
+                    if (empty($company)) $company = 'Enterprise Partner';
+                    if (empty($title)) $title = $headline ?: 'Specialist';
+
                     $user->experiences()->firstOrCreate(
                         [
-                            'company' => $exp['company'],
-                            'title' => $exp['title']
+                            'company' => $company,
+                            'title' => $title
                         ],
                         [
-                            'location' => $exp['location'] ?? 'Remote',
+                            'location' => $exp['location'] ?? $exp['city'] ?? 'Remote',
                             'type' => $exp['type'] ?? 'full-time',
-                            'start_date' => $exp['start_date'] ?? null,
-                            'end_date' => $exp['end_date'] ?? null,
-                            'description' => $exp['description'] ?? '',
-                            'technologies' => $exp['technologies'] ?? [],
+                            'start_date' => $exp['start_date'] ?? $exp['start'] ?? '2021-01',
+                            'end_date' => $exp['end_date'] ?? $exp['end'] ?? null,
+                            'description' => $exp['description'] ?? $exp['details'] ?? $exp['responsibilities'] ?? 'Responsible for system engineering and technical solution execution.',
+                            'technologies' => $exp['technologies'] ?? $exp['skills_used'] ?? [],
                         ]
                     );
                 }
             }
         }
 
-        // Populate education records
-        if (!empty($data['education']) && is_array($data['education'])) {
-            foreach ($data['education'] as $edu) {
-                if (is_array($edu) && !empty($edu['institution'])) {
+        // 4. Populate Educations (handles flexible keys)
+        $educations = $data['education'] ?? $data['educations'] ?? $data['academic'] ?? [];
+        if (!empty($educations) && is_array($educations)) {
+            foreach ($educations as $edu) {
+                if (is_array($edu)) {
+                    $inst = trim($edu['institution'] ?? $edu['school'] ?? $edu['university'] ?? $edu['college'] ?? '');
+                    $degree = trim($edu['degree'] ?? $edu['degree_name'] ?? $edu['degree_title'] ?? $edu['qualification'] ?? '');
+
+                    if (empty($inst)) $inst = 'University';
+                    if (empty($degree)) $degree = 'Bachelor Degree';
+
                     $user->educations()->firstOrCreate(
                         [
-                            'institution' => $edu['institution'],
-                            'degree' => $edu['degree'] ?? 'Bachelor Degree',
+                            'institution' => $inst,
+                            'degree' => $degree,
                         ],
                         [
-                            'field_of_study' => $edu['field_of_study'] ?? 'General',
-                            'start_date' => $edu['start_date'] ?? null,
-                            'end_date' => $edu['end_date'] ?? null,
-                            'description' => $edu['description'] ?? '',
+                            'field_of_study' => $edu['field_of_study'] ?? $edu['field'] ?? $edu['major'] ?? 'General',
+                            'start_date' => $edu['start_date'] ?? $edu['start'] ?? '2018-09',
+                            'end_date' => $edu['end_date'] ?? $edu['end'] ?? '2022-06',
+                            'description' => $edu['description'] ?? 'Completed degree with focus on core domain fundamentals.',
                         ]
                     );
                 }
             }
         }
 
-        // Populate projects
-        if (!empty($data['projects']) && is_array($data['projects'])) {
-            foreach ($data['projects'] as $proj) {
-                if (is_array($proj) && !empty($proj['title'])) {
-                    $user->projects()->firstOrCreate(
-                        ['title' => $proj['title']],
-                        [
-                            'description' => $proj['description'] ?? '',
-                            'role' => $proj['role'] ?? 'Specialist',
-                            'technologies' => $proj['technologies'] ?? [],
-                            'key_achievements' => $proj['key_achievements'] ?? [],
-                        ]
-                    );
+        // 5. Populate Projects (handles flexible keys)
+        $projects = $data['projects'] ?? $data['project_list'] ?? [];
+        if (!empty($projects) && is_array($projects)) {
+            foreach ($projects as $proj) {
+                if (is_array($proj)) {
+                    $projTitle = trim($proj['title'] ?? $proj['name'] ?? $proj['project_name'] ?? '');
+                    if (!empty($projTitle)) {
+                        $user->projects()->firstOrCreate(
+                            ['title' => $projTitle],
+                            [
+                                'description' => $proj['description'] ?? $proj['details'] ?? 'Software application project.',
+                                'role' => $proj['role'] ?? $proj['your_role'] ?? 'Developer',
+                                'technologies' => $proj['technologies'] ?? $proj['tech_stack'] ?? [],
+                                'key_achievements' => $proj['key_achievements'] ?? $proj['achievements'] ?? [],
+                            ]
+                        );
+                    }
                 }
             }
         }

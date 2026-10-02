@@ -40,14 +40,17 @@ PROMPT;
     {
         return <<<PROMPT
 You are an expert AI career consultant.
-Extract structured profile details from the following candidate resume text into a raw JSON object with keys:
-- "full_name": string
-- "professional_headline": string
-- "summary": string
-- "skills": array of objects with keys ("name", "category", "proficiency_level", "years_of_experience")
-- "education": array of objects with keys ("institution", "degree", "field_of_study", "start_date", "end_date", "description")
-- "experience": array of objects with keys ("company", "title", "location", "type", "start_date", "end_date", "description", "technologies")
-- "projects": array of objects with keys ("title", "description", "role", "technologies", "key_achievements")
+Extract comprehensive structured profile details from the following candidate resume text into a raw JSON object with exact keys:
+- "full_name": string (candidate's actual full name)
+- "professional_headline": string (e.g. "Senior Software Engineer", "Full Stack Developer", "Customer Service Officer")
+- "summary": string (a detailed 2-4 sentence professional summary of candidate experience and target goals)
+- "location": string (city, state/country or "Remote")
+- "phone": string (contact phone number or "")
+- "target_roles": array of strings (e.g. ["Full Stack Engineer", "Backend Developer"])
+- "skills": array of objects with keys ("name", "category", "proficiency_level", "years_of_experience") where category is "technical", "soft", "domain", or "language". Extract at least 5-10 technical/professional skills mentioned or implied!
+- "education": array of objects with keys ("institution", "degree", "field_of_study", "start_date", "end_date", "description"). Extract all university/college degrees.
+- "experience": array of objects with keys ("company", "title", "location", "type", "start_date", "end_date", "description", "technologies"). Extract all work histories and positions.
+- "projects": array of objects with keys ("title", "description", "role", "technologies", "key_achievements"). Extract all technical/professional projects.
 
 RESUME TEXT:
 {$resumeText}
