@@ -6,6 +6,7 @@ import { PreparationPlanWidget } from '@/components/dashboard/PreparationPlanWid
 import { api } from '@/services/api';
 import { JobPosting } from '@/types';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   PlayCircle,
   Brain,
@@ -15,7 +16,10 @@ import {
   HelpCircle,
   Sparkles,
   ArrowRight,
-  Sliders
+  Sliders,
+  AlertCircle,
+  CheckCircle2,
+  User as UserIcon
 } from 'lucide-react';
 
 const categories = [
@@ -33,10 +37,27 @@ export default function PracticePage() {
   const [selectedCategory, setSelectedCategory] = useState('Technical');
   const [difficulty, setDifficulty] = useState('intermediate');
   const [starting, setStarting] = useState(false);
+  const [eligibility, setEligibility] = useState<{
+    can_start: boolean;
+    has_profile: boolean;
+    has_target_job: boolean;
+    message: string;
+  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
     fetchJobs();
+    checkEligibility();
   }, []);
+
+  const checkEligibility = async () => {
+    try {
+      const res = await api.get('/interviews/eligibility');
+      setEligibility(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchJobs = async () => {
     try {
@@ -52,6 +73,7 @@ export default function PracticePage() {
 
   const handleStartPractice = async (category: string) => {
     setStarting(true);
+    setErrorMessage('');
     try {
       const res = await api.post('/interviews/start', {
         job_posting_id: selectedJob ? parseInt(selectedJob) : null,
@@ -62,8 +84,20 @@ export default function PracticePage() {
 
       const sessionId = res.data.data.id;
       router.push(`/mock-interview?session_id=${sessionId}`);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setErrorMessage(err.response.data.message);
+        if (err.response.data.has_profile !== undefined) {
+          setEligibility({
+            can_start: false,
+            has_profile: err.response.data.has_profile,
+            has_target_job: err.response.data.has_target_job,
+            message: err.response.data.message
+          });
+        }
+      } else {
+        setErrorMessage('Failed to start practice. Please ensure candidate profile and target job are completed.');
+      }
     } finally {
       setStarting(false);
     }
@@ -80,6 +114,69 @@ export default function PracticePage() {
             Focus on specific interview topics with instant AI coaching feedback after every response.
           </p>
         </div>
+
+        {eligibility && !eligibility.can_start && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 text-slate-100 space-y-3 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="font-bold text-sm text-amber-200">Action Required: Fill Profile & Add Target Job</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Before you can get 10 personalized AI interview questions, you must complete your Candidate Profile and insert a Target Job vacancy.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <UserIcon className="w-4 h-4 text-indigo-400" />
+                  <span className="font-medium text-slate-300">Candidate Profile</span>
+                </div>
+                {eligibility.has_profile ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Completed
+                  </span>
+                ) : (
+                  <Link
+                    href="/profile"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors"
+                  >
+                    Fill Profile →
+                  </Link>
+                )}
+              </div>
+
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-indigo-400" />
+                  <span className="font-medium text-slate-300">Target Job</span>
+                </div>
+                {eligibility.has_target_job ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Inserted
+                  </span>
+                ) : (
+                  <Link
+                    href="/jobs"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors"
+                  >
+                    Add Target Job →
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Target Job Selector */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -143,10 +240,10 @@ export default function PracticePage() {
 
                 <button
                   onClick={() => handleStartPractice(cat.id)}
-                  disabled={starting}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center space-x-2 text-xs shadow-lg shadow-indigo-600/20"
+                  disabled={starting || (eligibility !== null && !eligibility.can_start)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center space-x-2 text-xs shadow-lg shadow-indigo-600/20"
                 >
-                  <span>{starting ? 'Generating Questions...' : `Start ${cat.label} Session`}</span>
+                  <span>{starting ? 'Generating 10 Questions...' : `Start ${cat.label} Session`}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

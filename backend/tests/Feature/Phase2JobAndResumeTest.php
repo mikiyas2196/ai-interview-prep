@@ -55,7 +55,7 @@ class Phase2JobAndResumeTest extends TestCase
         $user = User::factory()->create();
         $token = $user->createToken('test_token')->plainTextToken;
 
-        $file = UploadedFile::fake()->create('candidate_cv.txt', 100, 'text/plain');
+        $file = UploadedFile::fake()->createWithContent('candidate_cv.txt', "Full Name: Alex Rivera\nHeadline: Senior Customer Service Officer\nSkills: Customer Relationship Management, Banking Operations, Active Listening\nExperience: Bank Teller at National Commercial Bank");
 
         $uploadResponse = $this->withHeader('Authorization', 'Bearer ' . $token)
             ->postJson('/api/resumes/upload', [

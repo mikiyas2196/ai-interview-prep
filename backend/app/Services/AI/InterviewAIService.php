@@ -17,6 +17,39 @@ class InterviewAIService
         $this->aiService = $aiService;
     }
 
+    public function checkEligibility(User $user): array
+    {
+        $hasProfile = $user->profile()->exists() && (
+            !empty(trim($user->profile->full_name ?? '')) ||
+            !empty(trim($user->profile->professional_headline ?? '')) ||
+            !empty(trim($user->profile->professional_summary ?? '')) ||
+            $user->skills()->count() > 0
+        );
+
+        $hasTargetJob = $user->jobPostings()->count() > 0;
+
+        $canStart = $hasProfile && $hasTargetJob;
+
+        $missing = [];
+        if (!$hasProfile) {
+            $missing[] = 'Candidate Profile';
+        }
+        if (!$hasTargetJob) {
+            $missing[] = 'Target Job Vacancy';
+        }
+
+        $message = $canStart
+            ? 'User is eligible for AI interview question generation.'
+            : 'Candidate Profile and Target Job Required: You must complete your Candidate Profile and insert a Target Job before getting interview questions. Missing: ' . implode(' and ', $missing) . '.';
+
+        return [
+            'can_start' => $canStart,
+            'has_profile' => $hasProfile,
+            'has_target_job' => $hasTargetJob,
+            'message' => $message,
+        ];
+    }
+
     public function startSession(
         User $user,
         ?int $jobPostingId = null,
@@ -24,6 +57,11 @@ class InterviewAIService
         string $mode = 'mock',
         string $difficulty = 'intermediate'
     ): InterviewSession {
+        $eligibility = $this->checkEligibility($user);
+        if (!$eligibility['can_start']) {
+            throw new \InvalidArgumentException($eligibility['message']);
+        }
+
         $jobPosting = $jobPostingId ? JobPosting::find($jobPostingId) : $user->jobPostings()->latest()->first();
 
         // Determine job title from job posting or candidate profile target role / headline / career goal
@@ -48,6 +86,11 @@ class InterviewAIService
         // Build memories dynamically from user's recorded candidate memories
         $userMemories = $user->memories ? $user->memories->take(5)->pluck('description')->toArray() : [];
 
+        // Collect all previously asked question texts for this user across past sessions to guarantee non-repeating questions
+        $previousQuestions = InterviewQuestion::whereHas('session', function ($query) use ($user) {
+            $query->where('user_id', $user->id);
+        })->pluck('question_text')->filter()->unique()->values()->toArray();
+
         // Build context for AI question generation
         $context = [
             'job_title' => $jobTitle,
@@ -59,7 +102,8 @@ class InterviewAIService
                 'strengths' => $skills ? array_slice($skills, 0, 3) : ['Communication', 'Domain Expertise'],
                 'notes' => $userMemories
             ],
-            'count' => 4,
+            'previous_questions' => $previousQuestions,
+            'count' => 10,
         ];
 
         $questionsData = $this->aiService->generateQuestions($context);

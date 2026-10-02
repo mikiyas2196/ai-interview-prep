@@ -7,6 +7,7 @@ import { AIChatPanel } from '@/components/interview/AIChatPanel';
 import { api } from '@/services/api';
 import { InterviewSession, InterviewQuestion } from '@/types';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Brain,
   Video,
@@ -18,6 +19,7 @@ import {
   Mic,
   MicOff,
   Briefcase,
+  User as UserIcon,
   MessageSquare
 } from 'lucide-react';
 
@@ -39,14 +41,33 @@ function MockInterviewContent() {
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [avatarState, setAvatarState] = useState<AIAvatarState>('idle');
   const [activeTab, setActiveTab] = useState<'interview' | 'chat'>('interview');
+  const [eligibility, setEligibility] = useState<{
+    can_start: boolean;
+    has_profile: boolean;
+    has_target_job: boolean;
+    message: string;
+  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
     if (sessionIdParam) {
       fetchSession(parseInt(sessionIdParam));
     } else {
-      setLoading(false);
+      checkEligibility();
     }
   }, [sessionIdParam]);
+
+  const checkEligibility = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/interviews/eligibility');
+      setEligibility(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchSession = async (id: number) => {
     setLoading(true);
@@ -62,6 +83,7 @@ function MockInterviewContent() {
 
   const handleStartNewMock = async () => {
     setSessionStarting(true);
+    setErrorMessage('');
     try {
       const res = await api.post('/interviews/start', {
         category: 'Technical',
@@ -71,8 +93,20 @@ function MockInterviewContent() {
       const newId = res.data.data.id;
       router.push(`/mock-interview?session_id=${newId}`);
       fetchSession(newId);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setErrorMessage(err.response.data.message);
+        if (err.response.data.has_profile !== undefined) {
+          setEligibility({
+            can_start: false,
+            has_profile: err.response.data.has_profile,
+            has_target_job: err.response.data.has_target_job,
+            message: err.response.data.message
+          });
+        }
+      } else {
+        setErrorMessage('Failed to start interview. Please ensure your Candidate Profile and Target Job are completed.');
+      }
     } finally {
       setSessionStarting(false);
     }
@@ -148,16 +182,79 @@ function MockInterviewContent() {
         </div>
         <h2 className="text-2xl font-bold text-slate-100">Realistic Live Mock Interview</h2>
         <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
-          Simulate a real 4-question technical & behavioral interview with an interactive AI Interviewer. AI evaluates your responses dynamically.
+          Simulate a real 10-question technical & behavioral interview with an interactive AI Interviewer tailored specifically to your Candidate Profile and Target Job.
         </p>
+
+        {eligibility && !eligibility.can_start && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6 text-slate-100 space-y-4 text-left shadow-xl max-w-xl mx-auto">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500/20 rounded-xl text-amber-400 shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-base text-amber-200">Candidate Profile & Target Job Required</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Before the AI Interviewer can generate 10 tailored interview questions, you must complete your Candidate Profile and insert at least one Target Job vacancy.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <UserIcon className="w-4 h-4 text-indigo-400" />
+                  <span className="font-medium text-slate-300">Candidate Profile</span>
+                </div>
+                {eligibility.has_profile ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Completed
+                  </span>
+                ) : (
+                  <Link
+                    href="/profile"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors"
+                  >
+                    Fill Profile →
+                  </Link>
+                )}
+              </div>
+
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-indigo-400" />
+                  <span className="font-medium text-slate-300">Target Job</span>
+                </div>
+                {eligibility.has_target_job ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Inserted
+                  </span>
+                ) : (
+                  <Link
+                    href="/jobs"
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors"
+                  >
+                    Add Target Job →
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl text-rose-400 text-xs text-left max-w-xl mx-auto flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         <button
           onClick={handleStartNewMock}
-          disabled={sessionStarting}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-3 rounded-xl transition-colors inline-flex items-center space-x-2 text-sm shadow-lg shadow-indigo-600/25"
+          disabled={sessionStarting || (eligibility !== null && !eligibility.can_start)}
+          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-medium px-6 py-3 rounded-xl transition-colors inline-flex items-center space-x-2 text-sm shadow-lg shadow-indigo-600/25"
         >
           <Sparkles className="w-4 h-4" />
-          <span>{sessionStarting ? 'Initializing Interviewer...' : 'Start Live Mock Interview'}</span>
+          <span>{sessionStarting ? 'Generating 10 Tailored Questions...' : 'Start Live Mock Interview (10 Questions)'}</span>
         </button>
       </div>
     );

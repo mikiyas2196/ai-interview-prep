@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Resumes & CV AI Extraction
     Route::get('/resumes', [ResumeController::class, 'index']);
     Route::post('/resumes/upload', [ResumeController::class, 'upload']);
+    Route::post('/resumes/upload-and-apply', [ResumeController::class, 'uploadAndApply']);
     Route::post('/resumes/{id}/apply', [ResumeController::class, 'applyToProfile']);
 
     // Preparation Plans
@@ -64,6 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Mock Interviews & Question Engine
     Route::get('/interviews', [InterviewController::class, 'index']);
+    Route::get('/interviews/eligibility', [InterviewController::class, 'getEligibility']);
     Route::post('/interviews/start', [InterviewController::class, 'startSession']);
     Route::post('/interviews/chat', [InterviewController::class, 'chat']);
     Route::get('/interviews/{id}', [InterviewController::class, 'showSession']);

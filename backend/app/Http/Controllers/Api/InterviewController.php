@@ -32,8 +32,24 @@ class InterviewController extends Controller
         return response()->json(['data' => $sessions]);
     }
 
+    public function getEligibility(Request $request)
+    {
+        $eligibility = $this->interviewAIService->checkEligibility($request->user());
+        return response()->json($eligibility);
+    }
+
     public function startSession(Request $request)
     {
+        $eligibility = $this->interviewAIService->checkEligibility($request->user());
+        if (!$eligibility['can_start']) {
+            return response()->json([
+                'message' => $eligibility['message'],
+                'has_profile' => $eligibility['has_profile'],
+                'has_target_job' => $eligibility['has_target_job'],
+                'error_code' => 'PROFILE_OR_JOB_REQUIRED'
+            ], 422);
+        }
+
         $validated = $request->validate([
             'job_posting_id' => 'nullable|exists:job_postings,id',
             'category' => 'nullable|string',

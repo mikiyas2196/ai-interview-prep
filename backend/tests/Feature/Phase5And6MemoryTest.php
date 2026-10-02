@@ -14,7 +14,21 @@ class Phase5And6MemoryTest extends TestCase
     public function test_interview_completion_triggers_evaluation_and_memory_extraction()
     {
         $user = User::factory()->create();
-        $user->profile()->create(['full_name' => 'Memory Candidate']);
+        $user->profile()->create([
+            'full_name' => 'Memory Candidate',
+            'professional_headline' => 'Customer Service Officer',
+        ]);
+        $user->skills()->create([
+            'name' => 'Communication',
+            'category' => 'soft',
+            'proficiency_level' => 'advanced',
+            'years_of_experience' => 3,
+        ]);
+        $user->jobPostings()->create([
+            'job_title' => 'Customer Service Officer',
+            'company' => 'National Bank',
+            'raw_description' => 'Customer service officer vacancy description.',
+        ]);
         $user->settings()->create(['memory_enabled' => true]);
 
         $token = $user->createToken('test_token')->plainTextToken;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
@@ -15,7 +15,13 @@ import {
   Trash2,
   Save,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  UploadCloud,
+  FileText,
+  Loader2,
+  X,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -62,6 +68,27 @@ export default function ProfilePage() {
   const [projDesc, setProjDesc] = useState('');
   const [projTech, setProjTech] = useState('');
 
+  // Insert CV Modal State
+  const [showCvModal, setShowCvModal] = useState(false);
+  const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
+  const [uploadingCv, setUploadingCv] = useState(false);
+  const [cvStep, setCvStep] = useState<'idle' | 'uploading' | 'parsing' | 'applying' | 'done' | 'error'>('idle');
+  const [cvErrorMessage, setCvErrorMessage] = useState('');
+  const [extractedCvSummary, setExtractedCvSummary] = useState<any>(null);
+
+  // Sync state when user context updates
+  useEffect(() => {
+    if (user) {
+      setFullName(user.profile?.full_name || user.name || '');
+      setHeadline(user.profile?.professional_headline || '');
+      setLocation(user.profile?.location || '');
+      setPhone(user.profile?.phone || '');
+      setCareerGoal(user.profile?.career_goal || '');
+      setSummary(user.profile?.professional_summary || '');
+      setTargetRoles(user.profile?.target_roles ? user.profile.target_roles.join(', ') : '');
+    }
+  }, [user]);
+
   const handleUpdateGeneralProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -82,6 +109,44 @@ export default function ProfilePage() {
       setMessage({ type: 'error', text: 'Failed to update profile.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUploadAndApplyCv = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedCvFile) return;
+
+    setUploadingCv(true);
+    setCvStep('uploading');
+    setCvErrorMessage('');
+    setExtractedCvSummary(null);
+
+    const formData = new FormData();
+    formData.append('resume', selectedCvFile);
+
+    try {
+      setCvStep('parsing');
+      const res = await api.post('/resumes/upload-and-apply', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setCvStep('applying');
+      const data = res.data;
+      setExtractedCvSummary(data.parsed_data || null);
+
+      await refreshUser();
+
+      setCvStep('done');
+      setMessage({
+        type: 'success',
+        text: 'CV uploaded successfully! Profile details, skills, work history, education and projects have been filled by AI.',
+      });
+    } catch (err: any) {
+      console.error(err);
+      setCvStep('error');
+      setCvErrorMessage(err.response?.data?.message || 'Failed to parse and extract CV. Please ensure the file is in PDF, DOCX, or TXT format.');
+    } finally {
+      setUploadingCv(false);
     }
   };
 
@@ -220,24 +285,39 @@ export default function ProfilePage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-            <User className="w-6 h-6 text-indigo-400" /> Candidate Profile
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Maintain your professional background. The AI interviewer uses this data to customize question generation.
-          </p>
+        {/* Header section with Insert CV button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-sm">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+              <User className="w-6 h-6 text-indigo-400" /> Candidate Profile
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Maintain your professional background. The AI interviewer uses this data to customize question generation.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setShowCvModal(true);
+              setCvStep('idle');
+              setSelectedCvFile(null);
+              setExtractedCvSummary(null);
+            }}
+            className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-500 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 border border-indigo-400/30 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>Insert CV (AI Auto-Fill)</span>
+          </button>
         </div>
 
         {message && (
           <div
-            className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+            className={`p-4 rounded-xl border text-xs flex items-center gap-2 ${
               message.type === 'success'
                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                 : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
             }`}
           >
-            {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+            {message.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
             <span>{message.text}</span>
           </div>
         )}
@@ -381,7 +461,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2.5 rounded-xl transition-colors flex items-center space-x-2"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2.5 rounded-xl transition-colors flex items-center space-x-2 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save Profile Changes'}</span>
@@ -393,7 +473,6 @@ export default function ProfilePage() {
         {/* TAB 2: SKILLS */}
         {activeTab === 'skills' && (
           <div className="space-y-6">
-            {/* Add Skill Form */}
             <form onSubmit={handleAddSkill} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl text-sm space-y-4">
               <h3 className="font-bold text-slate-200 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-indigo-400" /> Add New Skill
@@ -429,7 +508,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl px-4 py-2 transition-colors flex items-center justify-center space-x-1"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl px-4 py-2 transition-colors flex items-center justify-center space-x-1 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Skill</span>
@@ -437,7 +516,6 @@ export default function ProfilePage() {
               </div>
             </form>
 
-            {/* Skill List */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {user?.skills?.map((skill) => (
                 <div key={skill.id} className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
@@ -449,7 +527,7 @@ export default function ProfilePage() {
                   </div>
                   <button
                     onClick={() => handleDeleteSkill(skill.id)}
-                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -507,7 +585,7 @@ export default function ProfilePage() {
               />
               <button
                 type="submit"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 Add Experience
               </button>
@@ -523,7 +601,7 @@ export default function ProfilePage() {
                   </div>
                   <button
                     onClick={() => handleDeleteExperience(exp.id)}
-                    className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg"
+                    className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -567,7 +645,7 @@ export default function ProfilePage() {
               </div>
               <button
                 type="submit"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 Add Education Record
               </button>
@@ -580,7 +658,7 @@ export default function ProfilePage() {
                     <h4 className="font-bold text-slate-100">{edu.degree} in {edu.field_of_study}</h4>
                     <p className="text-xs text-indigo-400 font-medium">{edu.institution} • {edu.start_date} - {edu.end_date}</p>
                   </div>
-                  <button onClick={() => handleDeleteEducation(edu.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
+                  <button onClick={() => handleDeleteEducation(edu.id)} className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -629,7 +707,7 @@ export default function ProfilePage() {
               />
               <button
                 type="submit"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 Add Project
               </button>
@@ -643,7 +721,7 @@ export default function ProfilePage() {
                     <p className="text-xs text-indigo-400 font-medium">{proj.role}</p>
                     <p className="text-xs text-slate-400 leading-relaxed">{proj.description}</p>
                   </div>
-                  <button onClick={() => handleDeleteProject(proj.id)} className="p-1.5 text-slate-500 hover:text-rose-400">
+                  <button onClick={() => handleDeleteProject(proj.id)} className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -652,6 +730,201 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* INSERT CV MODAL */}
+      {showCvModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl space-y-0">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-base">Insert CV with AI</h3>
+                  <p className="text-xs text-slate-400">Upload your resume to automatically fill profile details</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!uploadingCv) setShowCvModal(false);
+                }}
+                disabled={uploadingCv}
+                className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5">
+              {cvStep === 'error' && (
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold">Upload Failed</div>
+                    <div className="mt-0.5">{cvErrorMessage}</div>
+                  </div>
+                </div>
+              )}
+
+              {cvStep === 'done' && extractedCvSummary ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-sm text-emerald-300">Profile Populated Successfully!</h4>
+                      <p className="mt-0.5">The AI analyzed your document and automatically filled your candidate profile details.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs space-y-3">
+                    <div className="font-semibold text-slate-300 border-b border-slate-800 pb-2">Extracted Data Overview</div>
+                    {extractedCvSummary.full_name && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/50">
+                        <span className="text-slate-400">Full Name</span>
+                        <span className="text-slate-100 font-medium">{extractedCvSummary.full_name}</span>
+                      </div>
+                    )}
+                    {extractedCvSummary.professional_headline && (
+                      <div className="flex justify-between py-1 border-b border-slate-800/50">
+                        <span className="text-slate-400">Headline</span>
+                        <span className="text-slate-100 font-medium">{extractedCvSummary.professional_headline}</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-center">
+                        <div className="text-lg font-bold text-indigo-400">{extractedCvSummary.skills?.length || 0}</div>
+                        <div className="text-[11px] text-slate-400">Skills Extracted</div>
+                      </div>
+                      <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-center">
+                        <div className="text-lg font-bold text-indigo-400">{extractedCvSummary.experience?.length || 0}</div>
+                        <div className="text-[11px] text-slate-400">Work Histories</div>
+                      </div>
+                      <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-center">
+                        <div className="text-lg font-bold text-indigo-400">{extractedCvSummary.education?.length || 0}</div>
+                        <div className="text-[11px] text-slate-400">Educations</div>
+                      </div>
+                      <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-center">
+                        <div className="text-lg font-bold text-indigo-400">{extractedCvSummary.projects?.length || 0}</div>
+                        <div className="text-[11px] text-slate-400">Projects</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : uploadingCv ? (
+                <div className="py-8 text-center space-y-4">
+                  <div className="inline-flex items-center justify-center p-4 bg-indigo-500/10 text-indigo-400 rounded-full animate-bounce">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-100 text-sm">
+                      {cvStep === 'uploading' && 'Uploading Document...'}
+                      {cvStep === 'parsing' && 'AI Parsing & Extracting Information...'}
+                      {cvStep === 'applying' && 'Updating Candidate Profile Automatically...'}
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">Please wait while Gemini AI analyzes your experience and skills.</p>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleUploadAndApplyCv} className="space-y-4">
+                  {/* File Drag and Drop Zone */}
+                  <div
+                    onClick={() => document.getElementById('cv-file-input')?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                      selectedCvFile
+                        ? 'border-indigo-500/60 bg-indigo-500/5'
+                        : 'border-slate-800 hover:border-slate-700 bg-slate-950/50'
+                    }`}
+                  >
+                    <input
+                      id="cv-file-input"
+                      type="file"
+                      accept=".pdf,.docx,.txt"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setSelectedCvFile(e.target.files[0]);
+                        }
+                      }}
+                    />
+
+                    {selectedCvFile ? (
+                      <div className="flex items-center justify-center space-x-3 text-left">
+                        <div className="p-3 bg-indigo-600/20 text-indigo-400 rounded-xl">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-slate-100 text-sm truncate max-w-[240px]">
+                            {selectedCvFile.name}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {(selectedCvFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for AI extraction
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="inline-flex p-3 bg-slate-800 text-indigo-400 rounded-xl">
+                          <UploadCloud className="w-6 h-6" />
+                        </div>
+                        <div className="text-sm font-medium text-slate-200">
+                          Click or drag resume here to upload
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Supports PDF, DOCX, TXT files up to 10MB
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex justify-end space-x-3">
+              {cvStep === 'done' ? (
+                <button
+                  onClick={() => setShowCvModal(false)}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
+                >
+                  View Updated Profile
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={uploadingCv}
+                    onClick={() => setShowCvModal(false)}
+                    className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedCvFile || uploadingCv}
+                    onClick={handleUploadAndApplyCv}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white font-medium text-xs px-5 py-2 rounded-xl transition-colors flex items-center space-x-2 cursor-pointer"
+                  >
+                    {uploadingCv ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Processing AI...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        <span>Extract & Fill Profile</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

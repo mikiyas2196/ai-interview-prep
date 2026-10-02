@@ -63,8 +63,12 @@ PROMPT;
         $difficulty = $context['difficulty'] ?? 'intermediate';
         $skills = implode(', ', $context['skills'] ?? []);
         $memories = json_encode($context['memories'] ?? []);
-        $count = $context['count'] ?? 3;
+        $count = $context['count'] ?? 10;
         $langInstruction = self::getLanguageInstruction($context);
+
+        $prevQuestionsList = !empty($context['previous_questions'])
+            ? "PREVIOUSLY ASKED QUESTIONS FOR THIS USER (DO NOT REPEAT OR REPHRASE ANY OF THESE):\n- " . implode("\n- ", $context['previous_questions'])
+            : "PREVIOUSLY ASKED QUESTIONS: None";
 
         return <<<PROMPT
 You are a senior hiring manager conducting a realistic mock interview for a candidate applying for the position of: "{$jobTitle}".
@@ -81,9 +85,13 @@ For example, for a "Customer Service Officer", ask about customer satisfaction, 
 RETRIEVED CANDIDATE MEMORIES & PAST PERFORMANCE:
 {$memories}
 
-Generate {$count} distinct, realistic, high-quality interview questions for "{$jobTitle}".
+{$prevQuestionsList}
 
-Return a JSON array of objects with keys:
+CRITICAL UNIQUNESS REQUIREMENT:
+Generate {$count} COMPLETELY NEW, DISTINCT, and REALISTIC high-quality interview questions for "{$jobTitle}".
+Do NOT repeat or reuse any of the previously asked questions listed above! Every practice attempt must generate brand new interview questions.
+
+Return a JSON array of {$count} objects with keys:
 - "id": string (unique slug)
 - "category": string
 - "question_text": string
