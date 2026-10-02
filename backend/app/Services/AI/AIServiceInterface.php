@@ -12,7 +12,7 @@ interface AIServiceInterface
     /**
      * Analyze raw resume text and extract candidate profile items.
      */
-    public function analyzeCandidate(string $resumeText): array;
+    public function analyzeCandidate(string $resumeText, ?string $base64Data = null, ?string $mimeType = null): array;
 
     /**
      * Generate context-aware interview questions.

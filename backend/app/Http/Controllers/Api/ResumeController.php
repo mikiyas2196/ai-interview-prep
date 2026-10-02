@@ -31,24 +31,27 @@ class ResumeController extends Controller
 
         $file = $request->file('resume');
         $path = $file->store('resumes', 'public');
+        $realPath = $file->getRealPath();
 
         $text = '';
+        $base64Data = null;
+        $mimeType = null;
         $extension = strtolower($file->getClientOriginalExtension());
+
         if ($extension === 'txt') {
-            $text = file_get_contents($file->getRealPath());
-        } else {
-            // For PDF / DOCX, extract readable ASCII text streams
-            $rawFileContent = @file_get_contents($file->getRealPath());
-            preg_match_all('/[\x20-\x7E\x0A\x0D]{3,}/', (string)$rawFileContent, $matches);
-            $extractedStrings = implode("\n", array_slice($matches[0] ?? [], 0, 400));
-
-            if (empty(trim($extractedStrings))) {
-                $extractedStrings = preg_replace('/[^\x20-\x7E\x0A\x0D]/', ' ', substr((string)$rawFileContent, 0, 5000));
+            $text = @file_get_contents($realPath);
+        } else if ($extension === 'docx') {
+            $text = self::extractTextFromDocx($realPath);
+        } else if ($extension === 'pdf') {
+            $text = self::extractTextFromPdf($realPath);
+            $rawBytes = @file_get_contents($realPath);
+            if ($rawBytes) {
+                $base64Data = base64_encode($rawBytes);
+                $mimeType = 'application/pdf';
             }
-
-            $userRole = $request->user()->profile?->professional_headline ?: 'Candidate Specialist';
-            $text = "Resume Document: " . $file->getClientOriginalName() . "\nCandidate Role: " . $userRole . "\n\nContent:\n" . trim($extractedStrings);
         }
+
+        $text = "Original File Name: " . $file->getClientOriginalName() . "\n\n" . trim((string)$text);
 
         $resume = $request->user()->resumes()->create([
             'file_name' => $file->getClientOriginalName(),
@@ -58,8 +61,8 @@ class ResumeController extends Controller
             'status' => 'processing',
         ]);
 
-        // Call AI Service to parse structured info
-        $parsedData = $this->aiService->analyzeCandidate($text);
+        // Call AI Service with text, base64, and mimeType
+        $parsedData = $this->aiService->analyzeCandidate($text, $base64Data, $mimeType);
 
         $resume->update([
             'parsed_data' => $parsedData,
@@ -70,6 +73,78 @@ class ResumeController extends Controller
             'message' => 'Resume uploaded and analyzed successfully',
             'data' => $resume
         ], 201);
+    }
+
+    public static function extractTextFromDocx(string $filePath): string
+    {
+        if (!class_exists('ZipArchive')) return '';
+        $zip = new \ZipArchive();
+        $text = '';
+        if ($zip->open($filePath) === true) {
+            if (($index = $zip->locateName('word/document.xml')) !== false) {
+                $xmlData = $zip->getFromIndex($index);
+                $dom = new \DOMDocument();
+                @$dom->loadXML($xmlData, LIBXML_NOENT | LIBXML_XINCLUDE | LIBXML_NOERROR | LIBXML_NOWARNING);
+                $text = strip_tags($dom->saveXML());
+            }
+            $zip->close();
+        }
+        return trim($text);
+    }
+
+    public static function extractTextFromPdf(string $filePath): string
+    {
+        $content = @file_get_contents($filePath);
+        if (!$content) return '';
+
+        $extractedText = '';
+
+        // Try decompressing FlateDecode streams if zlib is enabled
+        if (function_exists('gzuncompress')) {
+            preg_match_all('/stream\s*(.*?)\s*endstream/s', $content, $streamMatches);
+            foreach ($streamMatches[1] as $stream) {
+                $uncompressed = @gzuncompress(trim($stream));
+                if (!$uncompressed) {
+                    $uncompressed = @gzinflate(trim($stream));
+                }
+                if ($uncompressed) {
+                    if (preg_match_all('/\((.*?)\)\s*T[jJ]/s', $uncompressed, $tMatches)) {
+                        foreach ($tMatches[1] as $txt) {
+                            $extractedText .= $txt . " ";
+                        }
+                    }
+                }
+            }
+        }
+
+        // Search for uncompressed BT ... ET text blocks
+        if (empty(trim($extractedText))) {
+            if (preg_match_all('/BT\s*(.*?)\s*ET/s', $content, $matches)) {
+                foreach ($matches[1] as $block) {
+                    if (preg_match_all('/\((.*?)\)\s*T[jJ]/s', $block, $tMatches)) {
+                        foreach ($tMatches[1] as $txt) {
+                            $extractedText .= $txt . " ";
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: extract clean printable text tokens
+        if (empty(trim($extractedText))) {
+            preg_match_all('/[a-zA-Z0-9\s\.\,\:\;\-\@\/\+\#\(\)]{3,}/', $content, $cleanMatches);
+            $filtered = array_filter($cleanMatches[0] ?? [], function ($str) {
+                $trimmed = trim($str);
+                if (strlen($trimmed) < 3) return false;
+                if (preg_match('/^\d+\s+\d+\s+obj/i', $trimmed)) return false;
+                if (str_contains($trimmed, '/Font') || str_contains($trimmed, '/Catalog') || str_contains($trimmed, '/Type')) return false;
+                if (str_contains($trimmed, 'endobj') || str_contains($trimmed, 'stream')) return false;
+                return true;
+            });
+            $extractedText = implode("\n", array_slice($filtered, 0, 300));
+        }
+
+        return trim($extractedText);
     }
 
     public function applyToProfile(Request $request, $id)
