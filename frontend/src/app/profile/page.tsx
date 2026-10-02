@@ -126,13 +126,35 @@ export default function ProfilePage() {
 
     try {
       setCvStep('parsing');
-      const res = await api.post('/resumes/upload-and-apply', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      let data: any = null;
+
+      try {
+        // Attempt single-step endpoint first
+        const res = await api.post('/resumes/upload-and-apply', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        data = res.data;
+      } catch (directErr: any) {
+        // Fallback to standard 2-step process if single-step endpoint is 404
+        if (directErr.response?.status === 404) {
+          const uploadRes = await api.post('/resumes/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          const resumeId = uploadRes.data?.data?.id;
+          if (!resumeId) {
+            throw new Error('Resume uploaded but failed to retrieve resume ID.');
+          }
+
+          setCvStep('applying');
+          const applyRes = await api.post(`/resumes/${resumeId}/apply`);
+          data = applyRes.data;
+        } else {
+          throw directErr;
+        }
+      }
 
       setCvStep('applying');
-      const data = res.data;
-      setExtractedCvSummary(data.parsed_data || null);
+      setExtractedCvSummary(data.parsed_data || data.data?.parsed_data || null);
 
       await refreshUser();
 
@@ -142,9 +164,10 @@ export default function ProfilePage() {
         text: 'CV uploaded successfully! Profile details, skills, work history, education and projects have been filled by AI.',
       });
     } catch (err: any) {
-      console.error(err);
+      console.error('CV Upload error:', err);
       setCvStep('error');
-      setCvErrorMessage(err.response?.data?.message || 'Failed to parse and extract CV. Please ensure the file is in PDF, DOCX, or TXT format.');
+      const apiMsg = err.response?.data?.message || err.message;
+      setCvErrorMessage(apiMsg || 'Failed to parse and extract CV. Please ensure the file is in PDF, DOCX, or TXT format.');
     } finally {
       setUploadingCv(false);
     }

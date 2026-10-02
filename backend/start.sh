@@ -5,6 +5,10 @@ mkdir -p /app/database
 touch /app/database/database.sqlite
 chmod -R 777 /app/database /app/storage /app/bootstrap/cache
 
+# Clear route and config cache
+php artisan route:clear
+php artisan config:clear
+
 # Run database migrations
 php artisan migrate --force
 
